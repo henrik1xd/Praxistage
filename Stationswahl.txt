@@ -1,0 +1,47 @@
+void Stationswahl() {
+   if (ps2x.Button(PSB_L1) && Station5_Abstand1 != 0 && Station5_Abstand2 != 0 && Station5_Winkel1 != 0 && Station5_Winkel1 != 0) {
+     StationsNrAktuell = 5;
+   }
+   if (ps2x.Button(PSB_L1) && ps2x.Button(PSB_GREEN)) {
+     StationsNrAktuell = 1;
+   }
+   else if (ps2x.Button(PSB_L1) && ps2x.Button(PSB_RED)) {
+     StationsNrAktuell = 2;
+   }
+  else if (ps2x.Button(PSB_L1) && ps2x.Button(PSB_BLUE)) {
+     StationsNrAktuell = 3;
+   }
+  else if (ps2x.Button(PSB_L1) && ps2x.Button(PSB_PINK)) {
+     StationsNrAktuell = 4;
+   }
+   else {
+     StationsNrAktuell = 0;
+   }
+   if (ps2x.Button(PSB_L2) && ps2x.Button(PSB_GREEN)) {
+     Station5_Abstand1 = 0;
+   }
+   else if (ps2x.Button(PSB_L2) && ps2x.Button(PSB_RED)) {
+     Station5_Abstand2 = 0;
+   }
+  else if (ps2x.Button(PSB_L2) && ps2x.Button(PSB_BLUE)) {
+     Station5_Winkel1 = 0;
+   }
+  else if (ps2x.Button(PSB_L2) && ps2x.Button(PSB_PINK)) {
+     Station5_Winkel2 = 0;
+   }
+   
+    switch (StationsNrAktuell) {
+      case 0: //keine Station gewählt => manuelles Fahren
+        return;
+      case 1: //Station 1 Aktiv
+        return;
+      case 2: //Station 2 Aktiv
+        Station5_Winkel1 = get_angle();
+        return;
+      case 3: //Station 3 Aktiv
+        Station5_Winkel2 = get_angle();
+        return;
+      case 4: //Station 4 Aktiv
+        return;
+    }
+  }
