@@ -1,0 +1,49 @@
+/* Get all possible data from MPU6050
+ * Accelerometer values are given as multiple of the gravity [1g = 9.81 m/s²]
+ * Gyro values are given in deg/s
+ * Angles are given in degrees
+ * Note that X and Y are tilt angles and not pitch/roll.
+ *
+ * License: MIT
+ */
+
+#include "Wire.h"
+#include <MPU6050_light.h>
+
+MPU6050 mpu(Wire);
+
+void setup() {
+  Wire.begin();
+  byte status = mpu.begin();
+  delay(1000);
+  mpu.calcOffsets(true,true); // gyro and accelero
+  
+  
+}
+
+int  get_angle()
+  {
+    int a[10];
+    int sum = 0;
+    mpu.update();
+    for (int i=0; i< 10; i++ )
+    {
+      a[i] = mpu.getAngleY();
+      delay(1);
+    }
+  
+    
+  for (int i=0; i< 10; i++ )
+  {
+    sum = sum+a[i];  
+  }
+  
+  return sum/10;
+  }
+
+
+
+void loop() {  
+  
+
+}
