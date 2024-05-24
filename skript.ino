@@ -1,6 +1,32 @@
 #include <PS2X_lib.h>  //for v1.6
 #include <Adafruit_MotorShield.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
+  #define Gyro_SCL 5
+  #define Gyro_XDA 4
+  #define Ultraschall_TriggerPin 46
+  #define Ultraschall_EchoPin 48
+  #define Gamepad_DI 22
+  #define Gamepad_D0 23
+  #define Gamepad_CS 24
+  #define Gamepad_CLK 25
+  #define Line_r_A0 0
+  #define Line_l_A1 1
+  #define Turn_vr_out 2
+  #define Turn_hr_out 3
+  #define Turn_vl_out 18
+  #define Turn_hl_out 19
+  #define Color_LED 51
+  #define Color_S3 45
+  #define Color_S2 47
+  #define Color_out 49
+  #define Servo_Rechts  125
+  #define Servo_mitte  320
+  #define Servo_Links  515
+  #define Servo_Freq 50
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *Motor_1 = AFMS.getMotor(1);
 Adafruit_DCMotor *Motor_2 = AFMS.getMotor(2);
@@ -9,389 +35,317 @@ Adafruit_DCMotor *Motor_4 = AFMS.getMotor(4);
 
 PS2X ps2x; // create PS2 Controller Class
 
+//Variablen Definitionen===============================================================================================================================================================================
+  int error = 0; 
+  int speedy = 100;
 
-int error = 0; 
-byte type = 0;
-byte vibrate = 0;
+  byte type = 0;
+  byte vibrate = 0;
 
-int speedy = 100;
+  unsigned long Zeit_Ultraschallsensor, Zeit_Servo, Zeit_AblaufStation14, Zeit_Station14BoxenRegistrieren;
 
-//Variablen für Station5
-float distance;
-int activateStation5 = 0; //0=false, 1=true
-float m1;
-float umfang = 3.14159265359*0.065; //in Meter
-float distancePerSchranke = umfang/20;
-float n1;
-float m2;
-float n2;
-int U1;
-int U2;
-int U3;
+//Variablen Station5===============================================================================
+  int activateStation5 = 0; //0=false, 1=true
+  float umfang = 3.14159265359*0.065; //in Meter
+  float distancePerSchranke = umfang/20;
+  float n1, n2, m1, m2, distance, Station5_Abstand1, Station5_Abstand2, Station5_Winkel1, Station5_Winkel2;
+  int U1, U2, U3;
 
-void setup(){
- Serial.begin(57600);
-           // set up Serial library at 9600 bps
-  Serial.println("Adafruit Motorshield v2 - DC Motor test!");
+//Variablen Station14==============================================================================
+  float Ultraschall_Distance, Box1_MinEntfernung, Box2_MinEntfernung;
+  bool Servo_Langsam, Start_AblaufStation14, Station14_RegistriereBoxen, Station14_BoxenRegistriert, Station14_Messung;
+  uint16_t Servo_PulsIst, Servo_PulsSoll;
+  unsigned long Zeit_Laufzeit;
 
-  if (!AFMS.begin()) {         // create with the default frequency 1.6KHz
-  // if (!AFMS.begin(1000)) {  // OR with a different frequency, say 1KHz
-    Serial.println("Could not find Motor Shield. Check wiring.");
-    while (1);
+
+
+//SetUp================================================================================================================================================================================================
+  void setup(){
+    //Pinbelegung==================================================================================
+      pinMode(Ultraschall_TriggerPin, OUTPUT);
+      pinMode(Ultraschall_EchoPin, INPUT);
+
+    //Serielle Schnittstelle=======================================================================
+      Serial.begin(9600);
+
+    //Servo========================================================================================    
+      pwm.begin();
+      pwm.setOscillatorFrequency(27000000);
+      pwm.setPWMFreq(Servo_Freq);
+
+    //Radmotor=====================================================================================
+      AFMS.begin(); // create with the default frequency 1.6KHz
+      Motor_1->setSpeed(255);
+      Motor_1->run(BACKWARD);
+      Motor_1->run(FORWARD);
+      Motor_1->run(RELEASE);
+
+      Motor_2->setSpeed(255);
+      Motor_2->run(BACKWARD);
+      Motor_2->run(FORWARD);
+      Motor_2->run(RELEASE);
+
+      Motor_3->setSpeed(255);
+      Motor_3->run(BACKWARD);
+      Motor_3->run(FORWARD);
+      Motor_3->run(RELEASE);
+
+      Motor_4->setSpeed(255);
+      Motor_4->run(BACKWARD);
+      Motor_4->run(FORWARD);
+      Motor_4->run(RELEASE);
+
+    //Gamepad======================================================================================
+      error = ps2x.config_gamepad(25,23,24,22, true, true);   //setup pins and settings:  GamePad(clock, command, attention, data, Pressures?, Rumble?) check for error
+      type = ps2x.readType();
+
+    //Pause========================================================================================
+      delay(10);
+  
+}
+
+//Henriks Funktion=====================================================================================================================================================================================
+  bool Motor(String Motor ,int direction = 0,int speed = speedy){
+    
+    if (Motor == "hr") {
+      Motor_1->setSpeed(speed);
+      if (direction == 0) {Motor_1->run(RELEASE);}
+      else if (direction == 1) {Motor_1->run(FORWARD);}
+      else if (direction == 2) {Motor_1->run(BACKWARD);}
+      return true;
+    }
+    else if (Motor == "hl") {
+      Motor_4->setSpeed(speed);
+      if (direction == 0) {Motor_4->run(RELEASE);}
+      else if (direction == 1) {Motor_4->run(FORWARD);}
+      else if (direction == 2) {Motor_4->run(BACKWARD);} 
+      return true;
+    }
+    else if (Motor == "vr") {
+      Motor_2->setSpeed(speed);
+      if (direction == 0) {Motor_2->run(RELEASE);}
+      else if (direction == 1) {Motor_2->run(FORWARD);}
+      else if (direction == 2) {Motor_2->run(BACKWARD);}
+      return true;
+    }
+    else if (Motor == "vl") {
+      Motor_3->setSpeed(speed);
+      if (direction == 0) {Motor_3->run(RELEASE);}
+      else if (direction == 1) {Motor_3->run(FORWARD);}
+      else if (direction == 2) {Motor_3->run(BACKWARD);} 
+      return true;
+    }
   }
-Motor_1->setSpeed(255);
-Motor_1->run(BACKWARD);
-Motor_1->run(FORWARD);
-Motor_1->run(RELEASE);
-
-Motor_2->setSpeed(255);
-Motor_2->run(BACKWARD);
-Motor_2->run(FORWARD);
-Motor_2->run(RELEASE);
-
-Motor_3->setSpeed(255);
-Motor_3->run(BACKWARD);
-Motor_3->run(FORWARD);
-Motor_3->run(RELEASE);
-
-Motor_4->setSpeed(255);
-Motor_4->run(BACKWARD);
-Motor_4->run(FORWARD);
-Motor_4->run(RELEASE);
 
 
- //CHANGES for v1.6 HERE!!! **************PAY ATTENTION*************
-  
- error = ps2x.config_gamepad(25,23,24,22, true, true);   //setup pins and settings:  GamePad(clock, command, attention, data, Pressures?, Rumble?) check for error
- 
- if(error == 0){
-   Serial.println("Found Controller, configured successful");
-   Serial.println("Try out all the buttons, X will vibrate the controller, faster as you press harder;");
-  Serial.println("holding L1 or R1 will print out the analog stick values.");
-  Serial.println("Go to www.billporter.info for updates and to report bugs.");
- }
-   
-  else if(error == 1)
-   Serial.println("No controller found, check wiring, see readme.txt to enable debug. visit www.billporter.info for troubleshooting tips");
-   
-  else if(error == 2)
-   Serial.println("Controller found but not accepting commands. see readme.txt to enable debug. Visit www.billporter.info for troubleshooting tips");
-   
-  else if(error == 3)
-   Serial.println("Controller refusing to enter Pressures mode, may not support it. ");
-   
-   //Serial.print(ps2x.Analog(1), HEX);
-   
-   type = ps2x.readType(); 
-     switch(type) {
-       case 0:
-        Serial.println("Unknown Controller type");
-       break;
-       case 1:
-        Serial.println("DualShock Controller Found");
-       break;
-       case 2:
-         Serial.println("GuitarHero Controller Found");
-       break;
-     }
-  
-}
-
-
-//Henriks Funktion:
-bool Motor(String Motor ,int direction = 0,int speed = speedy){
- 
- if (Motor == "hr") 
- {
-  Motor_1->setSpeed(speed);
-  if (direction == 0) {Motor_1->run(RELEASE);}
-  else if (direction == 1) {Motor_1->run(FORWARD);}
-  else if (direction == 2) {Motor_1->run(BACKWARD);}
-  return true;
- }
-
-
-else if (Motor == "hl")
- {
-  Motor_4->setSpeed(speed);
-  if (direction == 0) {Motor_4->run(RELEASE);}
-  else if (direction == 1) {Motor_4->run(FORWARD);}
-  else if (direction == 2) {Motor_4->run(BACKWARD);} 
-  return true;
- }
-
-else if (Motor == "vr")
- {
-  Motor_2->setSpeed(speed);
-  if (direction == 0) {Motor_2->run(RELEASE);}
-  else if (direction == 1) {Motor_2->run(FORWARD);}
-  else if (direction == 2) {Motor_2->run(BACKWARD);}
-
-
-  return true;
- }
-
-
-
-else if (Motor == "vl")
- {
-  Motor_3->setSpeed(speed);
-  if (direction == 0) {Motor_3->run(RELEASE);}
-  else if (direction == 1) {Motor_3->run(FORWARD);}
-  else if (direction == 2) {Motor_3->run(BACKWARD);} 
-  return true;
- }
-
-
-
-}
-
-//blink Funktion
-void blink() {
-  distance += distancePerSchranke;
-}
-void DrehungGegenUhr(float n,float a) {
-  if (a < 0) {
-    DrehungInUhr(n, abs(a));
+//blink Funktion=======================================================================================================================================================================================
+  void blink() {
+    distance += distancePerSchranke;
+  }
+  void DrehungGegenUhr(float n,float a) {
+    if (a < 0) {
+      DrehungInUhr(n, abs(a));
+      return;
+    }
+    float time = (700/90)*a*n;
+    Motor("vr",1); 
+    Motor("vl",2);  
+    Motor("hr",1);  
+    Motor("hl",2);
+    delay(time);
+    Motor("vr",0); 
+    Motor("vl",0);  
+    Motor("hr",0);  
+    Motor("hl",0);
     return;
   }
-  float time = (700/90)*a*n;
-  Motor("vr",1); 
-  Motor("vl",2);  
-  Motor("hr",1);  
-  Motor("hl",2);
-  delay(time);
-  Motor("vr",0); 
-  Motor("vl",0);  
-  Motor("hr",0);  
-  Motor("hl",0);
-  return;
-}
-void DrehungInUhr(float n,float a) {
-  if (a < 0) {
-    DrehungGegenUhr(n, abs(a));
+  void DrehungInUhr(float n,float a) {
+    if (a < 0) {
+      DrehungGegenUhr(n, abs(a));
+      return;
+    }
+    float time = (700/90)*a*n;
+    Motor("vr",2); 
+    Motor("vl",1);  
+    Motor("hr",2);  
+    Motor("hl",1);
+    delay(time);
+    Motor("vr",0); 
+    Motor("vl",0);  
+    Motor("hr",0);  
+    Motor("hl",0);
     return;
   }
-  float time = (700/90)*a*n;
-  Motor("vr",2); 
-  Motor("vl",1);  
-  Motor("hr",2);  
-  Motor("hl",1);
-  delay(time);
-  Motor("vr",0); 
-  Motor("vl",0);  
-  Motor("hr",0);  
-  Motor("hl",0);
-  return;
-}
-//Station5
-bool Station5(float x1,float x2,float a1,float a2) {
 
-  
-  //Eingabe der Parameter:
-  if(ps2x.ButtonPressed(PSB_L3))  {          //will be TRUE if button was JUST pressed
-      U1 += 1;
-    }
-  if(ps2x.ButtonPressed(PSB_R3))  {          //will be TRUE if button was JUST pressed
-      U2 += 1;
-    }
-  if(ps2x.ButtonPressed(PSB_PINK))  {          //will be TRUE if button was JUST pressed
-      U3 += 1;
-    }
-  if(ps2x.ButtonPressed(PSB_PAD_DOWN))  {          //will be TRUE if button was JUST pressed
-      m1 += 0.1;
-    }
-  if(ps2x.ButtonPressed(PSB_PAD_UP))  {          //will be TRUE if button was JUST pressed
-      n1 += 0.1;
-    }
-  if(ps2x.ButtonPressed(PSB_PAD_LEFT))  {          //will be TRUE if button was JUST pressed
-      m2 += 0.1;
-    }
-  if(ps2x.ButtonPressed(PSB_PAD_RIGHT))  {          //will be TRUE if button was JUST pressed
-      n2 += 0.1;
-    }
-  float strecke1 = m1*x1;
-  float strecke2 = m2*x2;
-  //Start:
-  if(ps2x.ButtonPressed(PSB_START))  {          //will be TRUE if button was JUST pressed
-      speedy = 100;
-      distance = 0.0;
-      while (distance < strecke1/100)  {
-        Motor("vr",1); 
-        Motor("vl",1);  
-        Motor("hr",1);  
-        Motor("hl",1); 
-        attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+
+//Station5=============================================================================================================================================================================================
+  bool Station5(float x1,float x2,float a1,float a2) {
+
+    
+    //Eingabe der Parameter:
+    if(ps2x.ButtonPressed(PSB_L3))  {          //will be TRUE if button was JUST pressed
+        U1 += 1;
       }
-      Motor("vr",0); 
-      Motor("vl",0);  
-      Motor("hr",0);  
-      Motor("hl",0);
-      if (U1 == 1) {DrehungGegenUhr(n1,a1);}
-      if (U1 > 1) {DrehungInUhr(n1,a1);}
-      distance = 0.0;
-      while (distance < strecke2/100)  {
-        Motor("vr",1); 
-        Motor("vl",1);  
-        Motor("hr",1);  
-        Motor("hl",1); 
-        attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+    if(ps2x.ButtonPressed(PSB_R3))  {          //will be TRUE if button was JUST pressed
+        U2 += 1;
       }
-      Motor("vr",0); 
-      Motor("vl",0);  
-      Motor("hr",0);  
-      Motor("hl",0);
-      if (U2 == 1) {DrehungGegenUhr(n2,a2);}
-      if (U2 > 1) {DrehungInUhr(n2,a2);}
-      distance = 0.0;
-      while (distance < strecke1/100)  {
-        Motor("vr",1); 
-        Motor("vl",1);  
-        Motor("hr",1);  
-        Motor("hl",1); 
-        attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+    if(ps2x.ButtonPressed(PSB_PINK))  {          //will be TRUE if button was JUST pressed
+        U3 += 1;
       }
-      Motor("vr",0); 
-      Motor("vl",0);  
-      Motor("hr",0);  
-      Motor("hl",0);
-      if (U3 == 1) {DrehungGegenUhr(n1,a1);}
-      if (U3 > 1) {DrehungInUhr(n1,a1);}
-      distance = 0.0;
-      while (distance < strecke2/100)  {
-        Motor("vr",1); 
-        Motor("vl",1);  
-        Motor("hr",1);  
-        Motor("hl",1); 
-        attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+    if(ps2x.ButtonPressed(PSB_PAD_DOWN))  {          //will be TRUE if button was JUST pressed
+        m1 += 0.1;
       }
-      Motor("vr",0); 
-      Motor("vl",0);  
-      Motor("hr",0);  
-      Motor("hl",0);
-      activateStation5 = 0;
-      clearVaribles();
+    if(ps2x.ButtonPressed(PSB_PAD_UP))  {          //will be TRUE if button was JUST pressed
+        n1 += 0.1;
+      }
+    if(ps2x.ButtonPressed(PSB_PAD_LEFT))  {          //will be TRUE if button was JUST pressed
+        m2 += 0.1;
+      }
+    if(ps2x.ButtonPressed(PSB_PAD_RIGHT))  {          //will be TRUE if button was JUST pressed
+        n2 += 0.1;
+      }
+    float strecke1 = m1*x1;
+    float strecke2 = m2*x2;
+    //Start:
+    if(ps2x.ButtonPressed(PSB_START))  {          //will be TRUE if button was JUST pressed
+        speedy = 100;
+        distance = 0.0;
+        while (distance < strecke1/100)  {
+          Motor("vr",1); 
+          Motor("vl",1);  
+          Motor("hr",1);  
+          Motor("hl",1); 
+          attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+        }
+        Motor("vr",0); 
+        Motor("vl",0);  
+        Motor("hr",0);  
+        Motor("hl",0);
+        if (U1 == 1) {DrehungGegenUhr(n1,a1);}
+        if (U1 > 1) {DrehungInUhr(n1,a1);}
+        distance = 0.0;
+        while (distance < strecke2/100)  {
+          Motor("vr",1); 
+          Motor("vl",1);  
+          Motor("hr",1);  
+          Motor("hl",1); 
+          attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+        }
+        Motor("vr",0); 
+        Motor("vl",0);  
+        Motor("hr",0);  
+        Motor("hl",0);
+        if (U2 == 1) {DrehungGegenUhr(n2,a2);}
+        if (U2 > 1) {DrehungInUhr(n2,a2);}
+        distance = 0.0;
+        while (distance < strecke1/100)  {
+          Motor("vr",1); 
+          Motor("vl",1);  
+          Motor("hr",1);  
+          Motor("hl",1); 
+          attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+        }
+        Motor("vr",0); 
+        Motor("vl",0);  
+        Motor("hr",0);  
+        Motor("hl",0);
+        if (U3 == 1) {DrehungGegenUhr(n1,a1);}
+        if (U3 > 1) {DrehungInUhr(n1,a1);}
+        distance = 0.0;
+        while (distance < strecke2/100)  {
+          Motor("vr",1); 
+          Motor("vl",1);  
+          Motor("hr",1);  
+          Motor("hl",1); 
+          attachInterrupt(digitalPinToInterrupt(2), blink, RISING);
+        }
+        Motor("vr",0); 
+        Motor("vl",0);  
+        Motor("hr",0);  
+        Motor("hl",0);
+        activateStation5 = 0;
+        clearVaribles();
+    }
+    return true;
   }
-  return true;
-}
 
-bool Motorboth(String side,int direction = 0,int speed = 255) {
-  if (speed == 252){speed = 255;}
-    if (side == "r") {
-    Motor("hr",direction,speed);
-    Motor("vr",direction,speed);}
-  else if (side == "l") {
-    Motor("hl",direction,speed);
-    Motor("vl",direction,speed);}
-}
+  bool Motorboth(String side,int direction = 0,int speed = 255) {
+    if (speed == 252){speed = 255;}
+      if (side == "r") {
+      Motor("hr",direction,speed);
+      Motor("vr",direction,speed);}
+    else if (side == "l") {
+      Motor("hl",direction,speed);
+      Motor("vl",direction,speed);}
+  }
 
-void clearVaribles() {
-  distance = 0.0;
-  activateStation5 = 0; //0=false, 1=true
-  m1 = 0.0;
-  n1 = 0.0;
-  m2 = 0.0;
-  n2 = 0.0;
-  U1 = 0;
-  U2 = 0;
-  U3 = 0;
-}
+  void clearVaribles() {
+    distance = 0.0;
+    activateStation5 = 0; //0=false, 1=true
+    m1 = 0.0;
+    n1 = 0.0;
+    m2 = 0.0;
+    n2 = 0.0;
+    U1 = 0;
+    U2 = 0;
+    U3 = 0;
+  }
 
-void loop(){
-   
- if(error == 1) //skip loop if no controller found
-  return; 
-  
- if(type == 2){ //Guitar Hero Controller
-   
-   ps2x.read_gamepad();          //read controller 
-   
-   if(ps2x.ButtonPressed(GREEN_FRET))
-     Serial.println("Green Fret Pressed");
-   if(ps2x.ButtonPressed(RED_FRET))
-     Serial.println("Red Fret Pressed");
-   if(ps2x.ButtonPressed(YELLOW_FRET))
-     Serial.println("Yellow Fret Pressed");
-   if(ps2x.ButtonPressed(BLUE_FRET))
-     Serial.println("Blue Fret Pressed");
-   if(ps2x.ButtonPressed(ORANGE_FRET))
-     Serial.println("Orange Fret Pressed");
-     
+//Ultraschallsensor====================================================================================================================================================================================
+  void Input_Ultraschallsensor() {
+    digitalWrite(Ultraschall_TriggerPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(Ultraschall_TriggerPin, LOW);
+    unsigned long duration = pulseIn(Ultraschall_EchoPin, HIGH);
+    Ultraschall_Distance = duration * 0.03432 / 2;
+  }
 
-    if(ps2x.ButtonPressed(STAR_POWER))
-     Serial.println("Star Power Command");
-    
-    if(ps2x.Button(UP_STRUM))          //will be TRUE as long as button is pressed
-     Serial.println("Up Strum");
-    if(ps2x.Button(DOWN_STRUM))
-     Serial.println("DOWN Strum");
-  
- 
-    if(ps2x.Button(PSB_START)) {                  //will be TRUE as long as button is pressed
-      Serial.println("Start is being held");
-    }
-    if(ps2x.Button(PSB_SELECT))
-         Serial.println("Select is being held");
+//Servo================================================================================================================================================================================================
+  void Output_ServoCtrl() {
+    //Definitionen=================================================================================
+      int Servo_PulsInkrement = 10;
 
-    
-    if(ps2x.Button(ORANGE_FRET)) // print stick value IF TRUE
-    {
-        Serial.print("Wammy Bar Position:");
-        Serial.println(ps2x.Analog(WHAMMY_BAR), DEC); 
-    } 
- }
+    //Istwertbestimmung============================================================================
+      if (Servo_Langsam) {
+        if (Servo_PulsIst < Servo_PulsSoll) {
+          Servo_PulsIst = Servo_PulsIst + Servo_PulsInkrement;
+        }
+        else if (Servo_PulsIst < Servo_PulsSoll) {
+          Servo_PulsIst = Servo_PulsIst - Servo_PulsInkrement;
+        }
+      }
+      else{
+        Servo_PulsIst = Servo_PulsSoll;
+      }
 
- else { //DualShock Controller
-  
-    ps2x.read_gamepad(false, vibrate);          //read controller and set large motor to spin at 'vibrate' speed
+    //Pulsübergabe=================================================================================
+      pwm.setPWM(0, 0, Servo_PulsIst);
+  }
+
+void Motor1() {
+  ps2x.read_gamepad(false, vibrate);          //read controller and set large motor to spin at 'vibrate' speed
     
     if(ps2x.Button(PSB_START))                   //will be TRUE as long as button is pressed
          Serial.println("Start is being held");
     if(ps2x.Button(PSB_SELECT)) {
-         Serial.println("Select is being held");
+      Serial.println("Select is being held");
       clearVaribles();
     }
-         
-         
-     //if(ps2x.Button(PSB_PAD_UP)) {         //will be TRUE as long as button is pressed
-       //Serial.print("Up held this hard: ");
-       //Serial.println(ps2x.Analog(PSAB_PAD_UP), DEC);
-      //}
-      //if(ps2x.Button(PSB_PAD_RIGHT)){
-       //Serial.print("Right held this hard: ");
-        //Serial.println(ps2x.Analog(PSAB_PAD_RIGHT), DEC);
-      //}
-      //if(ps2x.Button(PSB_PAD_LEFT)){
-       //Serial.print("LEFT held this hard: ");
-        //Serial.println(ps2x.Analog(PSAB_PAD_LEFT), DEC);
-      //}
-      //if(ps2x.Button(PSB_PAD_DOWN)){
-       //Serial.print("DOWN held this hard: ");
-     //Serial.println(ps2x.Analog(PSAB_PAD_DOWN), DEC);
-      //}   
-      if(ps2x.Button(PSB_R2)) {
-        Motor("vr",1); 
-        Motor("vl",1);  
-        Motor("hr",1);  
-        Motor("hl",1); 
-      }
-       if(ps2x.Button(PSB_L2)) {
-        Motor("vr",2); 
-        Motor("vl",2);  
-        Motor("hr",2);  
-        Motor("hl",2); 
-      }
-      
-  
-    
-      vibrate = ps2x.Analog(PSAB_BLUE);        //this will set the large motor vibrate speed based on 
+    if(ps2x.Button(PSB_R2)) {
+      Motor("vr",1); 
+      Motor("vl",1);  
+      Motor("hr",1);  
+      Motor("hl",1); 
+    }
+      if(ps2x.Button(PSB_L2)) {
+      Motor("vr",2); 
+      Motor("vl",2);  
+      Motor("hr",2);  
+      Motor("hl",2); 
+    }
+    vibrate = ps2x.Analog(PSAB_BLUE);        //this will set the large motor vibrate speed based on 
                                               //how hard you press the blue (X) button    
-    
-    if (ps2x.NewButtonState())               //will be TRUE if any button changes state (on to off, or off to on)
-    {
-     
-       
-         
+    if (ps2x.NewButtonState()) {              //will be TRUE if any button changes state (on to off, or off to on)
         if(ps2x.Button(PSB_L1)) {
          Serial.println("L1 pressed");
          Motor("vr",1); 
@@ -416,10 +370,7 @@ void loop(){
         }
         if(ps2x.Button(PSB_GREEN))
          Serial.println("Triangle pressed");
-         
     }   
-         
-    
     if(ps2x.ButtonPressed(PSB_RED))  {          //will be TRUE if button was JUST pressed
       Serial.println("Circle just pressed");
       if (speedy <= 245) speedy += 10;
@@ -427,9 +378,7 @@ void loop(){
     if(ps2x.ButtonPressed(PSB_PINK))  {      
       Serial.println("Square just pressed");
       if (speedy >= 10) speedy -= 10;
-    }
-
-         
+    }    
     if(ps2x.ButtonReleased(PSB_PINK))             //will be TRUE if button was JUST released
          Serial.println("Square just released"); 
     if(ps2x.ButtonReleased(PSB_R2)) {
@@ -460,84 +409,53 @@ void loop(){
       Motor("hl",0); 
       Serial.println("L1 just released"); 
     }
-    
-    if(ps2x.NewButtonState(PSB_BLUE))            //will be TRUE if button was JUST pressed OR released
-         Serial.println("X just changed");  
+    if(ps2x.NewButtonState(PSB_BLUE)) {           //will be TRUE if button was JUST pressed OR released
+         Serial.println("X just changed");
+    }
+}
 
-    
-    
-    //if(ps2x.Button(PSB_L1) || ps2x.Button(PSB_R1)) // print stick values if either is TRUE
-    //{
-    //    Serial.print("Stick Values:");
-    //    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX  
-    //    Serial.print(",");
-    //    Serial.print(ps2x.Analog(PSS_LX), DEC); 
-    //    Serial.print(",");
-   //     Serial.print(ps2x.Analog(PSS_RY), DEC); 
-    //    Serial.print(",");
-   //     Serial.println(ps2x.Analog(PSS_RX), DEC); 
-    //} 
-    
-    
- }
-
-  //Steuerung von Hendrik
+void Motor2() {
   int speedy = 0;
 
+  //DualShock Controller
+  ps2x.read_gamepad(false, vibrate);  //read controller and set large motor to spin at 'vibrate' speed
 
+  if (ps2x.Button(PSB_START))  //will be TRUE as long as button is pressed
+    Serial.println("Start is being held");
+  if (ps2x.Button(PSB_SELECT))
+    Serial.println("Select is being held");
 
-  /* You must Read Gamepad to get new values and set vibration values
-     ps2x.read_gamepad(small motor on/off, larger motor strenght from 0-255)
-     if you don't enable the rumble, use ps2x.read_gamepad(); with no values
-     You should call this at least once a second
-   */
-  if (error == 1)  //skip loop if no controller found
-    return;
-                             //DualShock Controller
-    ps2x.read_gamepad(false, vibrate);  //read controller and set large motor to spin at 'vibrate' speed
-
-    if (ps2x.Button(PSB_START))  //will be TRUE as long as button is pressed
-      Serial.println("Start is being held");
-    if (ps2x.Button(PSB_SELECT))
-      Serial.println("Select is being held");
-
-    if (ps2x.Button(PSB_PAD_UP)) {  //will be TRUE as long as button is pressed
-      Serial.print("Up held this hard: ");
-      Serial.println(ps2x.Analog(PSAB_PAD_UP), DEC);
+  if (ps2x.Button(PSB_PAD_UP)) {  //will be TRUE as long as button is pressed
+    Serial.print("Up held this hard: ");
+    Serial.println(ps2x.Analog(PSAB_PAD_UP), DEC);
+  }
+  if (ps2x.Button(PSB_PAD_RIGHT)) {
+    Serial.print("Right held this hard: ");
+    Serial.println(ps2x.Analog(PSAB_PAD_RIGHT), DEC);
+  }
+  if (ps2x.Button(PSB_PAD_LEFT)) {
+    Serial.print("LEFT held this hard: ");
+    Serial.println(ps2x.Analog(PSAB_PAD_LEFT), DEC);
+  }
+  if (ps2x.Button(PSB_PAD_DOWN)) {
+    Serial.print("DOWN held this hard: ");
+    Serial.println(ps2x.Analog(PSAB_PAD_DOWN), DEC);
+  }
+  vibrate = ps2x.Analog(PSAB_CROSS);  //this will set the large motor vibrate speed based on how hard you press the blue (X) button
+  if (ps2x.NewButtonState()) {        //will be TRUE if any button changes state (on to off, or off to on)
+    if (ps2x.Button(PSB_L3))
+      Serial.println("L3 pressed");
+    if (ps2x.Button(PSB_R3))
+      Serial.println("R3 pressed");
+    if (ps2x.Button(PSB_L2)) {
+    //raum für ideen
     }
-    if (ps2x.Button(PSB_PAD_RIGHT)) {
-      Serial.print("Right held this hard: ");
-      Serial.println(ps2x.Analog(PSAB_PAD_RIGHT), DEC);
+    if (ps2x.Button(PSB_R2)) {
+    //raum für ideen
     }
-    if (ps2x.Button(PSB_PAD_LEFT)) {
-      Serial.print("LEFT held this hard: ");
-      Serial.println(ps2x.Analog(PSAB_PAD_LEFT), DEC);
+    if (ps2x.Button(PSB_TRIANGLE))
+      Serial.println("Triangle pressed");
     }
-    if (ps2x.Button(PSB_PAD_DOWN)) {
-      Serial.print("DOWN held this hard: ");
-      Serial.println(ps2x.Analog(PSAB_PAD_DOWN), DEC);
-    }
-
-    vibrate = ps2x.Analog(PSAB_CROSS);  //this will set the large motor vibrate speed based on how hard you press the blue (X) button
-    if (ps2x.NewButtonState()) {        //will be TRUE if any button changes state (on to off, or off to on)
-      if (ps2x.Button(PSB_L3))
-        Serial.println("L3 pressed");
-      if (ps2x.Button(PSB_R3))
-        Serial.println("R3 pressed");
-      if (ps2x.Button(PSB_L2)) {
-      //raum für ideen
-      }
-      if (ps2x.Button(PSB_R2)) {
-      //raum für ideen
-      }
-      if (ps2x.Button(PSB_TRIANGLE))
-        Serial.println("Triangle pressed");
-    }
-
-    //if (ps2x.ButtonPressed(PSB_CIRCLE)) {
-    //drive_along_line();    
-    //}  //will be TRUE if button was JUST pressed
-
     if (ps2x.NewButtonState(PSB_CROSS))  //will be TRUE if button was JUST pressed OR released
       Serial.println("X just changed");
     if (ps2x.ButtonReleased(PSB_SQUARE))  //will be TRUE if button was JUST released
@@ -631,27 +549,71 @@ void loop(){
 
 
     }
-      
-
+  
       Motorboth("l",direction_l,speedy_l);
       Motorboth("r",direction_r,speedy_r);
       digitalWrite(A11,255);
-      
-  
+}
+  void Stationswahl() {
+    switch (StationsNrAktuell) {
+      case 0: //keine Station gewählt => manuelles Fahren
 
+      case 1: //Station 1 Aktiv
 
+      case 2: //Station 2 Aktiv
 
-//Aktivieren Station 5
-  if(ps2x.ButtonPressed(PSB_GREEN))  {      
-    if (activateStation5 == 0) {activateStation5 = 1;
-      return;
+      case 3: //Station 3 Aktiv
+
+      case 4: //Station 4 Aktiv
+
     }
-    }
-  if (activateStation5 == 1) {
-    Station5(100,100,90,90);
   }
+//Loop=================================================================================================================================================================================================
+  void loop() {
+
+    //Interne Definitionen=========================================================================
+      uint8_t ZeitDelta_Ultraschallsensor = 50;
+      uint8_t ZeitDelta_Servo = 50;
+      uint8_t ZeitDelta_AblaufStation14 = 500;
+      uint8_t ZeitDelta_Station14BoxenRegistrieren = 50;
+      
+
+    //Zeit=========================================================================================
+      Zeit_Laufzeit = millis();
+
+    //Input========================================================================================
+      if (Station14_Messung && Zeit_Laufzeit - Zeit_Ultraschallsensor >= ZeitDelta_Ultraschallsensor) {
+        Zeit_Ultraschallsensor = Zeit_Laufzeit;
+        Input_Ultraschallsensor();
+      }
+
+    //Ablaufsteuerung==============================================================================
+      if (Zeit_Laufzeit - Zeit_AblaufStation14 >= ZeitDelta_AblaufStation14) {
+        Zeit_AblaufStation14 = Zeit_Laufzeit;
+        //Ablauf_Station_1_4();
+      }
+      if (Station14_RegistriereBoxen && Zeit_Laufzeit - Zeit_Station14BoxenRegistrieren > ZeitDelta_Station14BoxenRegistrieren) {
+        Zeit_Station14BoxenRegistrieren = Zeit_Laufzeit;
+        //Station_1_4_BoxenRegistrieren();
+      }
+
+    //Output=======================================================================================
+      if (Zeit_Laufzeit - Zeit_Servo >= ZeitDelta_Servo) {
+        ZeitDelta_Servo = Zeit_Laufzeit;
+        Output_ServoCtrl();
+      }
+      
+    //DualShock Controller
+    Motor1();
+    Motor2();
+  //Aktivieren Station 5
+    if(ps2x.ButtonPressed(PSB_GREEN))  {      
+      if (activateStation5 == 0) {activateStation5 = 1;
+        return;
+      }
+      }
+    if (activateStation5 == 1) {
+      Station5(Station5_Abstand1, Station5_Abstand2, Station5_Winkel1, Station5_Winkel2);
+    }
 
 }
-
-
-
