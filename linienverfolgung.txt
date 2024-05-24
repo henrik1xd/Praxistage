@@ -1,1 +1,30 @@
+bool drive_along_line(bool run)
+  { 
+    if (run == true){
+    int rechts = analogRead(A1);
+    int links = analogRead(A0);
+  
+    if (links < 60 && rechts < 60)
+    {
+      Motorboth("r",1,100);
+      Motorboth("l",1,100);
+    }
 
+    if (rechts >100 && links < 60)
+    { 
+      Motorboth("l");
+      Motorboth("r",1,60);
+    } 
+
+
+    if (links >100 && rechts < 60)
+    { Motorboth("r");
+      Motorboth("l",1,60);
+    } 
+    return true;
+  }
+    Motorboth("l");
+    Motorboth("r");
+    return false;
+
+  }
