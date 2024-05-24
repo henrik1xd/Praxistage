@@ -1,0 +1,35 @@
+bool funHighDistanceChange() {
+  int iTemp;
+  if (Ultraschall_Distance > 5 && Ultraschall_Distance < 35) {
+    iTemp++;
+  }
+  if (iTemp >= 3) {
+    iTemp = 0;
+    return; true;
+  }
+  iTemp = 0;
+  return; false;
+}
+
+
+void ServoSet() {
+  if (funHighDistanceChange()) {
+    if (Servo_PulsIst > 320) {
+      Servo_PulsSoll = Servo_Links;
+    }
+    else {
+      Servo_PulsSoll = Servo_Rechts;
+    }
+  }
+}
+
+void ServoDrehen() {
+  if (Servo_PulsSoll == 515) {
+    Servo_PulsSoll = 125;
+    return;
+  }
+  else if (Servo_PulsSoll == 125) {
+    Servo_PulsSoll = 515;
+    return;
+  }
+}
